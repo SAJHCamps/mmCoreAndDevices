@@ -113,6 +113,9 @@ int NIAnalogOutputPort::Initialize()
    if (err != DEVICE_OK)
        return err;
    AddAllowedValue("Wave type", g_Sine);
+   AddAllowedValue("Wave type", g_Square);
+   AddAllowedValue("Wave type", g_Saw);
+   AddAllowedValue("Wave type", g_Triangle);
 
    pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnSampleRate);
    err = CreateFloatProperty("Sample Rate", sampleRate_, false, pAct);
@@ -614,6 +617,57 @@ int NIAnalogOutputPort::StartOnDemandTask()
            for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
            {
                data.push_back(amplitude_*sin(6.2831853 *frequency_*t) + offset_);
+           }
+       }
+       else if (waveMode_ == g_Square)
+       {
+           if (sampleRate_ < 2 * frequency_)
+               return ERR_SAMPLING_RATE_TOO_LOW;
+
+           maximum = offset_ + amplitude_;
+           minimum = offset_ - amplitude_;
+           if (maximum > maxVolts_ || minimum < minVolts_)
+               return ERR_VOLTAGE_OUT_OF_RANGE;
+
+           for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
+           {
+               if (2*t  < 1 / frequency_)
+                  data.push_back(amplitude_ + offset_);
+               else
+                  data.push_back(-amplitude_ + offset_);
+           }
+       }
+       else if (waveMode_ == g_Saw)
+       {
+           if (sampleRate_ < 10 * frequency_)
+               return ERR_SAMPLING_RATE_TOO_LOW;
+
+           maximum = offset_ + amplitude_;
+           minimum = offset_ - amplitude_;
+           if (maximum > maxVolts_ || minimum < minVolts_)
+               return ERR_VOLTAGE_OUT_OF_RANGE;
+
+           for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
+           {
+               data.push_back(amplitude_ * 2 * (t/frequency_ - 0.5) + offset_);
+           }
+       }
+       else if (waveMode_ == g_Triangle)
+       {
+           if (sampleRate_ < 10 * frequency_)
+               return ERR_SAMPLING_RATE_TOO_LOW;
+
+           maximum = offset_ + amplitude_;
+           minimum = offset_ - amplitude_;
+           if (maximum > maxVolts_ || minimum < minVolts_)
+               return ERR_VOLTAGE_OUT_OF_RANGE;
+
+           for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
+           {
+               if (2*t < 1 / frequency_)
+                   data.push_back(amplitude_ * 4 * (t / frequency_ - 0.25) + offset_);
+               else
+                   data.push_back(amplitude_ * 4 * (0.75 - t / frequency_) + offset_);
            }
        }
        else

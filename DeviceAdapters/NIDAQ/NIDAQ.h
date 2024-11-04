@@ -47,6 +47,9 @@ extern const char* g_UseHubSetting;
 extern const char* g_Const;
 extern const char* g_Wave;
 extern const char* g_Sine;
+extern const char* g_Square;
+extern const char* g_Saw;
+extern const char* g_Triangle;
 
 extern const int ERR_SEQUENCE_RUNNING;
 extern const int ERR_SEQUENCE_TOO_LONG;
