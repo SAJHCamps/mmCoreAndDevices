@@ -37,6 +37,11 @@ NIAnalogOutputPort::NIAnalogOutputPort(const std::string& port) :
    maxVolts_(5.0),
    neverSequenceable_(false),
    transitionPostExposure_(false),
+   waveMode_("Sine wave"),
+   frequency_(1.0),
+   amplitude_(0.0),
+   offset_(0.0),
+   outputMode_(g_Const),
    task_(0)
 {
    InitializeDefaultErrorMessages();
@@ -96,7 +101,52 @@ int NIAnalogOutputPort::Initialize()
    AddAllowedValue("Sequence Transition Pre-Post Exposure", g_Pre);
    AddAllowedValue("Sequence Transition Pre-Post Exposure", g_Post);
 
-   err = StartOnDemandTask(gateOpen_ ? gatedVoltage_ : 0.0);
+   pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnOutputMode);
+   err = CreateStringProperty("Output mode", g_Const, false, pAct);
+   if (err != DEVICE_OK)
+       return err;
+   AddAllowedValue("Output mode", g_Const);
+   AddAllowedValue("Output mode", g_Wave);
+
+   pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnWaveMode);
+   err = CreateStringProperty("Wave type", g_Sine, false, pAct);
+   if (err != DEVICE_OK)
+       return err;
+   AddAllowedValue("Wave type", g_Sine);
+
+   pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnSampleRate);
+   err = CreateFloatProperty("Sample Rate", sampleRate_, false, pAct);
+   if (err != DEVICE_OK)
+       return err;
+   err = SetPropertyLimits("Sample Rate", 0.0, 10000);
+   if (err != DEVICE_OK)
+       return err;
+
+   pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnWaveFrequency);
+   err = CreateFloatProperty("Standard wave frequency", frequency_, false, pAct);
+   if (err != DEVICE_OK)
+       return err;
+   err = SetPropertyLimits("Standard wave frequency", 0.0, 10000);
+   if (err != DEVICE_OK)
+       return err;
+
+   pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnWaveAmplitude);
+   err = CreateFloatProperty("Standard wave amplitude", amplitude_, false, pAct);
+   if (err != DEVICE_OK)
+       return err;
+   err = SetPropertyLimits("Standard wave amplitude", 0.0, maxVolts);
+   if (err != DEVICE_OK)
+       return err;
+
+   pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnWaveOffset);
+   err = CreateFloatProperty("Standard wave offset", amplitude_, false, pAct);
+   if (err != DEVICE_OK)
+       return err;
+   err = SetPropertyLimits("Standard wave offset", minVolts, maxVolts);
+   if (err != DEVICE_OK)
+       return err;
+
+   err = StartOnDemandTask();
    if (err != DEVICE_OK)
       return err;
 
@@ -130,13 +180,13 @@ int NIAnalogOutputPort::SetGateOpen(bool open)
 {
    if (open && !gateOpen_)
    {
-      int err = StartOnDemandTask(gatedVoltage_);
+      int err = StartOnDemandTask();
       if (err != DEVICE_OK)
          return err;
    }
    else if (!open && gateOpen_)
    {
-      int err = StartOnDemandTask(0.0);
+      int err = StartOnDemandTask();
       if (err != DEVICE_OK)
          return err;
    }
@@ -161,7 +211,7 @@ int NIAnalogOutputPort::SetSignal(double volts)
    gatedVoltage_ = volts;
    if (gateOpen_)
    {
-      int err = StartOnDemandTask(gatedVoltage_);
+      int err = StartOnDemandTask();
       if (err != DEVICE_OK)
          return err;
    }
@@ -235,7 +285,7 @@ int NIAnalogOutputPort::StopDASequence()
 
    // Recover voltage from before sequencing started, so that we
    // are back in sync
-   err = StartOnDemandTask(gateOpen_ ? gatedVoltage_ : 0.0);
+   err = StartOnDemandTask();
    if (err != DEVICE_OK)
       return err;
 
@@ -332,6 +382,118 @@ int NIAnalogOutputPort::OnSequenceTransition(MM::PropertyBase* pProp, MM::Action
 }
 
 
+int NIAnalogOutputPort::OnWaveMode(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::BeforeGet)
+    {
+        pProp->Set(waveMode_.c_str());
+    }
+    else if (eAct == MM::AfterSet)
+    {
+        pProp->Get(waveMode_);
+
+        if (gateOpen_ && !sequenceRunning_)
+        {
+            int nierr = StartOnDemandTask();
+            if (nierr != DEVICE_OK)
+                return nierr;
+        }
+    }
+    return DEVICE_OK;
+}
+
+
+int NIAnalogOutputPort::OnSampleRate(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::BeforeGet)
+    {
+        pProp->Set(sampleRate_);
+    }
+    else if (eAct == MM::AfterSet)
+    {
+        double rate;
+        pProp->Get(rate);
+        sampleRate_ = rate;
+
+        if (gateOpen_ && !sequenceRunning_)
+        {
+            int nierr = StartOnDemandTask();
+            if (nierr != DEVICE_OK)
+                return nierr;
+        }
+    }
+    return DEVICE_OK;
+}
+
+
+int NIAnalogOutputPort::OnWaveFrequency(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::BeforeGet)
+    {
+        pProp->Set(frequency_);
+    }
+    else if (eAct == MM::AfterSet)
+    {
+        double freq;
+        pProp->Get(freq);
+        frequency_ = freq;
+
+        if (gateOpen_ && !sequenceRunning_)
+        {
+            int nierr = StartOnDemandTask();
+            if (nierr != DEVICE_OK)
+                return nierr;
+        }
+    }
+    return DEVICE_OK;
+}
+
+
+int NIAnalogOutputPort::OnWaveAmplitude(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::BeforeGet)
+    {
+        pProp->Set(amplitude_);
+    }
+    else if (eAct == MM::AfterSet)
+    {
+        double ampl;
+        pProp->Get(ampl);
+        amplitude_ = ampl;
+
+        if (gateOpen_ && !sequenceRunning_)
+        {
+            int nierr = StartOnDemandTask();
+            if (nierr != DEVICE_OK)
+                return nierr;
+        }
+    }
+    return DEVICE_OK;
+}
+
+
+int NIAnalogOutputPort::OnWaveOffset(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::BeforeGet)
+    {
+        pProp->Set(offset_);
+    }
+    else if (eAct == MM::AfterSet)
+    {
+        double offs;
+        pProp->Get(offs);
+        offset_ = offs;
+        if (gateOpen_ && !sequenceRunning_)
+        {
+            int nierr = StartOnDemandTask();
+            if (nierr != DEVICE_OK)
+                return nierr;
+        }
+    }
+    return DEVICE_OK;
+}
+
+
 int NIAnalogOutputPort::OnVoltage(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
    if (eAct == MM::BeforeGet)
@@ -350,6 +512,23 @@ int NIAnalogOutputPort::OnVoltage(MM::PropertyBase* pProp, MM::ActionType eAct)
 }
 
 
+int NIAnalogOutputPort::OnOutputMode(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::BeforeGet)
+    {
+        pProp->Set(outputMode_.c_str());
+    }
+    else if (eAct == MM::AfterSet)
+    {
+        pProp->Get(outputMode_);
+
+        if (gateOpen_ && !sequenceRunning_)
+            StartOnDemandTask();
+    }
+    return DEVICE_OK;
+}
+
+
 int NIAnalogOutputPort::TranslateHubError(int err)
 {
    if (err == DEVICE_OK)
@@ -361,9 +540,10 @@ int NIAnalogOutputPort::TranslateHubError(int err)
 }
 
 
-int NIAnalogOutputPort::StartOnDemandTask(double voltage)
+int NIAnalogOutputPort::StartOnDemandTask()
 {
-   if (sequenceRunning_)
+    
+    if (sequenceRunning_)
       return ERR_SEQUENCE_RUNNING;
 
    if (task_)
@@ -383,34 +563,96 @@ int NIAnalogOutputPort::StartOnDemandTask(double voltage)
    }
    LogMessage("Created task", true);
 
-   nierr = DAQmxCreateAOVoltageChan(task_, niPort_.c_str(), NULL, minVolts_, maxVolts_,
-      DAQmx_Val_Volts, NULL);
-   if (nierr != 0)
-   {
-      LogMessage(GetNIDetailedErrorForMostRecentCall().c_str());
-      goto error;
-   }
-   LogMessage("Created AO voltage channel", true);
 
-   float64 samples[1];
-   samples[0] = voltage;
-   int32 numWritten = 0;
-   nierr = DAQmxWriteAnalogF64(task_, 1,
-      true, DAQmx_Val_WaitInfinitely, DAQmx_Val_GroupByChannel,
-      samples, &numWritten, NULL);
-   if (nierr != 0)
+   if (outputMode_ == g_Const)
    {
-      LogMessage(GetNIDetailedErrorForMostRecentCall().c_str());
-      goto error;
+       double voltage = gatedVoltage_;
+       nierr = DAQmxCreateAOVoltageChan(task_, niPort_.c_str(), NULL, minVolts_, maxVolts_,
+           DAQmx_Val_Volts, NULL);
+       if (nierr != 0)
+       {
+           LogMessage(GetNIDetailedErrorForMostRecentCall().c_str());
+           goto error;
+       }
+       LogMessage("Created AO voltage channel", true);
+
+       float64 samples[1];
+       samples[0] = voltage;
+       int32 numWritten = 0;
+       nierr = DAQmxWriteAnalogF64(task_, 1,
+           true, DAQmx_Val_WaitInfinitely, DAQmx_Val_GroupByChannel,
+           samples, &numWritten, NULL);
+       if (nierr != 0)
+       {
+           LogMessage(GetNIDetailedErrorForMostRecentCall().c_str());
+           goto error;
+       }
+       if (numWritten != 1)
+       {
+           LogMessage("Failed to write voltage");
+           // This is presumably unlikely; no error code here
+           goto error;
+       }
+       LogMessage(("Wrote voltage with task autostart: " +
+           boost::lexical_cast<std::string>(voltage) + " V").c_str(), true);
    }
-   if (numWritten != 1)
+   else if (outputMode_ == g_Wave)
    {
-      LogMessage("Failed to write voltage");
-      // This is presumably unlikely; no error code here
-      goto error;
+       float64 minimum;
+       float64 maximum;
+       std::vector<float64> data;
+
+       if (waveMode_ == g_Sine) {
+           if (sampleRate_ < 10 * frequency_)
+               return ERR_SAMPLING_RATE_TOO_LOW;
+
+           maximum = offset_ + amplitude_;
+           minimum = offset_ - amplitude_;
+           if (maximum > maxVolts_ || minimum < minVolts_)
+               return ERR_VOLTAGE_OUT_OF_RANGE;
+           
+           for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
+           {
+               data.push_back(amplitude_*sin(6.2831853 *frequency_*t) + offset_);
+           }
+       }
+       else
+       {
+           minimum = 0.0;
+           maximum = 0.0;
+           data = { 0.0 };
+       }
+
+       nierr = DAQmxCreateAOVoltageChan(task_, niPort_.c_str(), NULL, minimum, maximum, DAQmx_Val_Volts, NULL);
+       if (nierr != 0)
+       {
+           LogMessage(GetNIDetailedErrorForMostRecentCall().c_str());
+           goto error;
+       }
+       LogMessage("Created AO voltage wave channel", true);
+
+       nierr = DAQmxCfgSampClkTiming(task_, NULL, sampleRate_, DAQmx_Val_Rising, DAQmx_Val_ContSamps, data.size());
+       if (nierr != 0)
+       {
+           LogMessage(GetNIDetailedErrorForMostRecentCall().c_str());
+           goto error;
+       }
+       LogMessage("Created AO voltage wave channel timing", true);
+
+       int32 amount_written = 0;
+       nierr = DAQmxWriteAnalogF64(task_, data.size(), true, DAQmx_Val_WaitInfinitely, DAQmx_Val_GroupByScanNumber, 
+           data.data(), &amount_written, NULL);
+       if (nierr != 0)
+       {
+           LogMessage(GetNIDetailedErrorForMostRecentCall().c_str());
+           goto error;
+       }
+       else if (amount_written != data.size())
+           return ERR_FAILED_TO_WRITE_ALL_SAMPLES;
+
+       LogMessage("Wrote AO voltage values", true);
    }
-   LogMessage(("Wrote voltage with task autostart: " +
-      boost::lexical_cast<std::string>(voltage) + " V").c_str(), true);
+   
 
    return DEVICE_OK;
 

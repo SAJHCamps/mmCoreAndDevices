@@ -46,6 +46,9 @@ const char* g_Never = "Never";
 const char* g_UseHubSetting = "Use hub setting";
 const char* g_Post = "Post";
 const char* g_Pre = "Pre";
+const char* g_Const = "Constant mode";
+const char* g_Wave = "Standard wave mode";
+const char* g_Sine = "Sine wave";
 
 const int ERR_SEQUENCE_RUNNING = 2001;
 const int ERR_SEQUENCE_TOO_LONG = 2002;
@@ -58,6 +61,9 @@ const int ERR_UNEXPECTED_AMOUNT_OF_MEASUREMENTS = 2008;
 const int ERR_FAILED_TO_OPEN_TRACE = 2009;
 const int ERR_INVALID_REQUEST = 2010;
 const int ERR_SEQUENCE_INVALID_NUMBER = 2011;
+const int ERR_SAMPLING_RATE_TOO_LOW = 2012;
+const int ERR_FAILED_TO_WRITE_ALL_SAMPLES = 2013;
+const int ERR_INVALID_REQUEST = 2014;
 
 
 
