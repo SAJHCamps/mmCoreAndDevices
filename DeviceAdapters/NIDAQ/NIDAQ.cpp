@@ -49,6 +49,10 @@ const char* g_Pre = "Pre";
 const char* g_Const = "Constant mode";
 const char* g_Wave = "Standard wave mode";
 const char* g_Sine = "Sine wave";
+const char* g_Square = "Square wave";
+const char* g_Saw = "Sawtooth wave";
+const char* g_Triangle = "Triangle wave";
+
 
 const int ERR_SEQUENCE_RUNNING = 2001;
 const int ERR_SEQUENCE_TOO_LONG = 2002;
