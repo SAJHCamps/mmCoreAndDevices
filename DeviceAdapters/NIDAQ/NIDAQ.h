@@ -44,6 +44,9 @@ extern const char* g_Never;
 extern const char* g_Pre;
 extern const char* g_Post;
 extern const char* g_UseHubSetting;
+extern const char* g_Const;
+extern const char* g_Wave;
+extern const char* g_Sine;
 
 extern const int ERR_SEQUENCE_RUNNING;
 extern const int ERR_SEQUENCE_TOO_LONG;
@@ -54,6 +57,8 @@ extern const int ERR_VOLTAGE_RANGE_EXCEEDS_DEVICE_LIMITS;
 extern const int ERR_UNKNOWN_PINS_PER_PORT;
 extern const int ERR_UNEXPECTED_AMOUNT_OF_MEASUREMENTS;
 extern const int ERR_FAILED_TO_OPEN_TRACE;
+extern const int ERR_SAMPLING_RATE_TOO_LOW;
+extern const int ERR_FAILED_TO_WRITE_ALL_SAMPLES;
 
 
 inline std::string GetNIError(int32 nierr)
@@ -373,14 +378,21 @@ private:
    int OnSequenceable(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnSequenceTransition(MM::PropertyBase* pProp, MM::ActionType eAct);
 
+   int OnWaveMode(MM::PropertyBase* pProp, MM::ActionType eAct);
+   int OnSampleRate(MM::PropertyBase* pProp, MM::ActionType eAct);
+   int OnWaveFrequency(MM::PropertyBase* pProp, MM::ActionType eAct);
+   int OnWaveAmplitude(MM::PropertyBase* pProp, MM::ActionType eAct);
+   int OnWaveOffset(MM::PropertyBase* pProp, MM::ActionType eAct);;
+
    // Post-init property action handlers
    int OnVoltage(MM::PropertyBase* pProp, MM::ActionType eAct);
+   int OnOutputMode(MM::PropertyBase* pProp, MM::ActionType eAct);
 
 private:
    NIDAQHub* GetHub() const
    { return static_cast<NIDAQHub*>(GetParentHub()); }
    int TranslateHubError(int err);
-   int StartOnDemandTask(double voltage);
+   int StartOnDemandTask();
    int StopTask();
 
 private:
@@ -397,6 +409,15 @@ private:
    bool neverSequenceable_;
    bool transitionPostExposure_; // when to transition in a sequence, not that we always transition on a rising flank
       // it can be advantaguous to transition post exposure, in which case we have to modify our sequence 
+
+   std::string waveMode_;
+   float sampleRate_;
+
+   float frequency_;
+   float amplitude_;
+   float offset_;
+
+   std::string outputMode_;
 
    TaskHandle task_;
 
