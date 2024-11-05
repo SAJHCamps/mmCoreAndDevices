@@ -22,6 +22,8 @@
 
 #include "ModuleInterface.h"
 
+#include <fstream>
+
 //
 // MultiAnalogOutPort
 //
@@ -41,6 +43,7 @@ NIAnalogOutputPort::NIAnalogOutputPort(const std::string& port) :
    frequency_(1.0),
    amplitude_(0.0),
    offset_(0.0),
+   customWavePath_(""),
    outputMode_(g_Const),
    task_(0)
 {
@@ -116,6 +119,7 @@ int NIAnalogOutputPort::Initialize()
    AddAllowedValue("Wave type", g_Square);
    AddAllowedValue("Wave type", g_Saw);
    AddAllowedValue("Wave type", g_Triangle);
+   AddAllowedValue("Wave type", g_Custom);
 
    pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnSampleRate);
    err = CreateFloatProperty("Sample Rate", sampleRate_, false, pAct);
@@ -146,6 +150,11 @@ int NIAnalogOutputPort::Initialize()
    if (err != DEVICE_OK)
        return err;
    err = SetPropertyLimits("Standard wave offset", minVolts, maxVolts);
+   if (err != DEVICE_OK)
+       return err;
+
+   pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnCustomWavePath);
+   err = CreateStringProperty("Custom Wave Path", "", false, pAct);
    if (err != DEVICE_OK)
        return err;
 
@@ -497,6 +506,27 @@ int NIAnalogOutputPort::OnWaveOffset(MM::PropertyBase* pProp, MM::ActionType eAc
 }
 
 
+int NIAnalogOutputPort::OnCustomWavePath(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::BeforeGet)
+    {
+        pProp->Set(customWavePath_.c_str());
+    }
+    else if (eAct == MM::AfterSet)
+    {
+        pProp->Get(customWavePath_);
+
+        if (gateOpen_ && !sequenceRunning_)
+        {
+            int nierr = StartOnDemandTask();
+            if (nierr != DEVICE_OK)
+                return nierr;
+        }
+    }
+    return DEVICE_OK;
+}
+
+
 int NIAnalogOutputPort::OnVoltage(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
    if (eAct == MM::BeforeGet)
@@ -621,7 +651,7 @@ int NIAnalogOutputPort::StartOnDemandTask()
        }
        else if (waveMode_ == g_Square)
        {
-           if (sampleRate_ < 2 * frequency_)
+           if (sampleRate_ < 10 * frequency_)
                return ERR_SAMPLING_RATE_TOO_LOW;
 
            maximum = offset_ + amplitude_;
@@ -669,6 +699,32 @@ int NIAnalogOutputPort::StartOnDemandTask()
                else
                    data.push_back(amplitude_ * 4 * (0.75 - t / frequency_) + offset_);
            }
+       }
+       else if (waveMode_ == g_Custom)
+       {
+           std::ifstream wave(customWavePath_);
+           if (!wave.is_open())
+               return ERR_FAILED_TO_OPEN_TRACE;
+           
+           std::string string_value;
+           float64 value;
+           while (std::getline(wave, string_value, ','))
+           {
+               value = std::stof(string_value);
+               if (data.size() == 0)
+               {
+                   maximum = value;
+                   minimum = value;
+               }
+
+               data.push_back(value);
+               if (value > maximum)
+                   maximum = value;
+               else if (value < minimum)
+                   minimum = value;
+           }
+           
+           wave.close();
        }
        else
        {
