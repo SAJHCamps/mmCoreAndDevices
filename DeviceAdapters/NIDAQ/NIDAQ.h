@@ -50,6 +50,7 @@ extern const char* g_Sine;
 extern const char* g_Square;
 extern const char* g_Saw;
 extern const char* g_Triangle;
+extern const char* g_Custom;
 
 extern const int ERR_SEQUENCE_RUNNING;
 extern const int ERR_SEQUENCE_TOO_LONG;
@@ -386,7 +387,9 @@ private:
    int OnSampleRate(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnWaveFrequency(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnWaveAmplitude(MM::PropertyBase* pProp, MM::ActionType eAct);
-   int OnWaveOffset(MM::PropertyBase* pProp, MM::ActionType eAct);;
+   int OnWaveOffset(MM::PropertyBase* pProp, MM::ActionType eAct);
+
+   int OnCustomWavePath(MM::PropertyBase* pProp, MM::ActionType eAct);
 
    // Post-init property action handlers
    int OnVoltage(MM::PropertyBase* pProp, MM::ActionType eAct);
@@ -420,6 +423,8 @@ private:
    float frequency_;
    float amplitude_;
    float offset_;
+
+   std::string customWavePath_;
 
    std::string outputMode_;
 

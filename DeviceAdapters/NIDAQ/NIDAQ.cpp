@@ -52,6 +52,7 @@ const char* g_Sine = "Sine wave";
 const char* g_Square = "Square wave";
 const char* g_Saw = "Sawtooth wave";
 const char* g_Triangle = "Triangle wave";
+const char* g_Custom = "Custom wave";
 
 
 const int ERR_SEQUENCE_RUNNING = 2001;
@@ -67,7 +68,8 @@ const int ERR_INVALID_REQUEST = 2010;
 const int ERR_SEQUENCE_INVALID_NUMBER = 2011;
 const int ERR_SAMPLING_RATE_TOO_LOW = 2012;
 const int ERR_FAILED_TO_WRITE_ALL_SAMPLES = 2013;
-const int ERR_INVALID_REQUEST = 2014;
+const int ERR_FAILED_TO_OPEN_CUSTOM_WAVE = 2014;
+const int ERR_INVALID_REQUEST = 2015;
 
 
 
