@@ -384,15 +384,19 @@ private:
 
    int OnWaveMode(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnSampleRate(MM::PropertyBase* pProp, MM::ActionType eAct);
+   int OnSync(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnWaveFrequency(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnWaveAmplitude(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnWaveOffset(MM::PropertyBase* pProp, MM::ActionType eAct);
+   int OnPhaseShift(MM::PropertyBase* pProp, MM::ActionType eAct);
 
    int OnCustomWavePath(MM::PropertyBase* pProp, MM::ActionType eAct);
 
    // Post-init property action handlers
    int OnVoltage(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnOutputMode(MM::PropertyBase* pProp, MM::ActionType eAct);
+
+   std::vector<float64> GenerateWave();
 
 private:
    NIDAQHub* GetHub() const
@@ -418,10 +422,12 @@ private:
 
    std::string waveMode_;
    float sampleRate_;
+   bool sync_;
 
    float frequency_;
    float amplitude_;
    float offset_;
+   float phaseShift_;
 
    std::string customWavePath_;
 

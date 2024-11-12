@@ -40,9 +40,12 @@ NIAnalogOutputPort::NIAnalogOutputPort(const std::string& port) :
    neverSequenceable_(false),
    transitionPostExposure_(false),
    waveMode_("Sine wave"),
+   sampleRate_(1000),
+   sync_(false),
    frequency_(1.0),
    amplitude_(0.0),
    offset_(0.0),
+   phaseShift_(0.0),
    customWavePath_(""),
    outputMode_(g_Const),
    task_(0)
@@ -129,6 +132,13 @@ int NIAnalogOutputPort::Initialize()
    if (err != DEVICE_OK)
        return err;
 
+   pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnSync);
+   err = CreateStringProperty("Synchronised", g_Const, false, pAct);
+   if (err != DEVICE_OK)
+       return err;
+   AddAllowedValue("Synchronised", "True");
+   AddAllowedValue("Synchronised", "False");
+
    pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnWaveFrequency);
    err = CreateFloatProperty("Standard wave frequency", frequency_, false, pAct);
    if (err != DEVICE_OK)
@@ -150,6 +160,14 @@ int NIAnalogOutputPort::Initialize()
    if (err != DEVICE_OK)
        return err;
    err = SetPropertyLimits("Standard wave offset", minVolts, maxVolts);
+   if (err != DEVICE_OK)
+       return err;
+
+   pAct = new CPropertyAction(this, &NIAnalogOutputPort::OnPhaseShift);
+   err = CreateFloatProperty("Standard wave phase", phaseShift_, false, pAct);
+   if (err != DEVICE_OK)
+       return err;
+   err = SetPropertyLimits("Standard wave phase", 0.0, 360.0);
    if (err != DEVICE_OK)
        return err;
 
@@ -266,11 +284,6 @@ int NIAnalogOutputPort::StartDASequence()
       // Do we neet to return an error code?  Probably...
       return DEVICE_OK;
    }
-
-   // probably beneficial in all cases to move to the first position,
-   // essential if we are transitioning post-exposure
-   double volt0 = sentSequence_[0];
-   SetSignal(volt0);
 
    if (transitionPostExposure_) {
       for (int i = 0; i < sentSequence_.size() - 1; i++) {
@@ -438,6 +451,44 @@ int NIAnalogOutputPort::OnSampleRate(MM::PropertyBase* pProp, MM::ActionType eAc
 }
 
 
+int NIAnalogOutputPort::OnSync(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::BeforeGet)
+    {
+        pProp->Set(sync_? "True" : "False");
+    }
+    else if (eAct == MM::AfterSet)
+    {
+        std::string syncStr;
+        pProp->Get(syncStr);
+        sync_ = syncStr == "True";
+        
+        int nierr = DEVICE_OK;
+        if (sync_)
+        {
+            nierr = StopTask();
+            if (nierr != DEVICE_OK)
+                return nierr;
+
+            sentSequence_ = GenerateWave();
+            nierr  = StartDASequence();
+            if (nierr != DEVICE_OK)
+                return nierr;
+        }
+        else
+        {
+            nierr = StopDASequence();
+            if (nierr != DEVICE_OK)
+                return nierr;
+            nierr = StartOnDemandTask();
+            if (nierr != DEVICE_OK)
+                return nierr;
+        }
+    }
+    return DEVICE_OK;
+}
+
+
 int NIAnalogOutputPort::OnWaveFrequency(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
     if (eAct == MM::BeforeGet)
@@ -506,6 +557,28 @@ int NIAnalogOutputPort::OnWaveOffset(MM::PropertyBase* pProp, MM::ActionType eAc
 }
 
 
+int NIAnalogOutputPort::OnPhaseShift(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+    if (eAct == MM::BeforeGet)
+    {
+        pProp->Set(phaseShift_);
+    }
+    else if (eAct == MM::AfterSet)
+    {
+        double phase;
+        pProp->Get(phase);
+        phaseShift_ = phase;
+        if (gateOpen_ && !sequenceRunning_)
+        {
+            int nierr = StartOnDemandTask();
+            if (nierr != DEVICE_OK)
+                return nierr;
+        }
+    }
+    return DEVICE_OK;
+}
+
+
 int NIAnalogOutputPort::OnCustomWavePath(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
     if (eAct == MM::BeforeGet)
@@ -559,6 +632,71 @@ int NIAnalogOutputPort::OnOutputMode(MM::PropertyBase* pProp, MM::ActionType eAc
             StartOnDemandTask();
     }
     return DEVICE_OK;
+}
+
+
+std::vector<float64> NIAnalogOutputPort::GenerateWave()
+{
+    std::vector<float64> data;
+    if (waveMode_ == g_Sine)
+    {
+        for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
+        {
+            data.push_back(amplitude_ * sin(6.2831853 * frequency_ * t) + offset_);
+        }
+    }
+    else if (waveMode_ == g_Square)
+    {
+        for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
+        {
+            if (2 * t < 1 / frequency_)
+                data.push_back(amplitude_ + offset_);
+            else
+                data.push_back(-amplitude_ + offset_);
+        }
+    }
+    else if (waveMode_ == g_Saw)
+    {
+        for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
+        {
+            data.push_back(amplitude_ * 2 * (t / frequency_ - 0.5) + offset_);
+        }
+    }
+    else if (waveMode_ == g_Triangle)
+    {
+        for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
+        {
+            if (2 * t < 1 / frequency_)
+                data.push_back(amplitude_ * 4 * (t / frequency_ - 0.25) + offset_);
+            else
+                data.push_back(amplitude_ * 4 * (0.75 - t / frequency_) + offset_);
+        }
+    }
+    else if (waveMode_ == g_Custom)
+    {
+        std::ifstream wave(customWavePath_);
+        if (!wave.is_open())
+        {
+            return {0.0};
+        }
+
+        std::string string_value;
+        float64 value;
+        while (std::getline(wave, string_value, ','))
+        {
+            data.push_back(std::stof(string_value));
+        }
+
+        wave.close();
+    }
+    else
+    {
+        data = { 0.0 };
+    }
+
+    int shifts = std::round((phaseShift_ / 360.0) * (data.size()-1));
+    std::rotate(data.begin(), data.begin() + shifts, data.end());
+    return data;
 }
 
 
@@ -631,107 +769,10 @@ int NIAnalogOutputPort::StartOnDemandTask()
    }
    else if (outputMode_ == g_Wave)
    {
-       float64 minimum;
-       float64 maximum;
-       std::vector<float64> data;
 
-       if (waveMode_ == g_Sine) {
-           if (sampleRate_ < 10 * frequency_)
-               return ERR_SAMPLING_RATE_TOO_LOW;
-
-           maximum = offset_ + amplitude_;
-           minimum = offset_ - amplitude_;
-           if (maximum > maxVolts_ || minimum < minVolts_)
-               return ERR_VOLTAGE_OUT_OF_RANGE;
-           
-           for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
-           {
-               data.push_back(amplitude_*sin(6.2831853 *frequency_*t) + offset_);
-           }
-       }
-       else if (waveMode_ == g_Square)
-       {
-           if (sampleRate_ < 10 * frequency_)
-               return ERR_SAMPLING_RATE_TOO_LOW;
-
-           maximum = offset_ + amplitude_;
-           minimum = offset_ - amplitude_;
-           if (maximum > maxVolts_ || minimum < minVolts_)
-               return ERR_VOLTAGE_OUT_OF_RANGE;
-
-           for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
-           {
-               if (2*t  < 1 / frequency_)
-                  data.push_back(amplitude_ + offset_);
-               else
-                  data.push_back(-amplitude_ + offset_);
-           }
-       }
-       else if (waveMode_ == g_Saw)
-       {
-           if (sampleRate_ < 10 * frequency_)
-               return ERR_SAMPLING_RATE_TOO_LOW;
-
-           maximum = offset_ + amplitude_;
-           minimum = offset_ - amplitude_;
-           if (maximum > maxVolts_ || minimum < minVolts_)
-               return ERR_VOLTAGE_OUT_OF_RANGE;
-
-           for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
-           {
-               data.push_back(amplitude_ * 2 * (t/frequency_ - 0.5) + offset_);
-           }
-       }
-       else if (waveMode_ == g_Triangle)
-       {
-           if (sampleRate_ < 10 * frequency_)
-               return ERR_SAMPLING_RATE_TOO_LOW;
-
-           maximum = offset_ + amplitude_;
-           minimum = offset_ - amplitude_;
-           if (maximum > maxVolts_ || minimum < minVolts_)
-               return ERR_VOLTAGE_OUT_OF_RANGE;
-
-           for (float64 t = 0; t < 1 / frequency_; t += 1 / sampleRate_)
-           {
-               if (2*t < 1 / frequency_)
-                   data.push_back(amplitude_ * 4 * (t / frequency_ - 0.25) + offset_);
-               else
-                   data.push_back(amplitude_ * 4 * (0.75 - t / frequency_) + offset_);
-           }
-       }
-       else if (waveMode_ == g_Custom)
-       {
-           std::ifstream wave(customWavePath_);
-           if (!wave.is_open())
-               return ERR_FAILED_TO_OPEN_TRACE;
-           
-           std::string string_value;
-           float64 value;
-           while (std::getline(wave, string_value, ','))
-           {
-               value = std::stof(string_value);
-               if (data.size() == 0)
-               {
-                   maximum = value;
-                   minimum = value;
-               }
-
-               data.push_back(value);
-               if (value > maximum)
-                   maximum = value;
-               else if (value < minimum)
-                   minimum = value;
-           }
-           
-           wave.close();
-       }
-       else
-       {
-           minimum = 0.0;
-           maximum = 0.0;
-           data = { 0.0 };
-       }
+       std::vector<float64> data = GenerateWave();
+       float64 minimum = *std::min_element(data.begin(), data.end());
+       float64 maximum = *std::max_element(data.begin(), data.end());
 
        nierr = DAQmxCreateAOVoltageChan(task_, niPort_.c_str(), NULL, minimum, maximum, DAQmx_Val_Volts, NULL);
        if (nierr != 0)
