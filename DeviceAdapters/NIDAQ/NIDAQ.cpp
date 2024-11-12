@@ -741,7 +741,7 @@ int NIDAQHub::StartAOSequencingTask()
    }
    LogMessage(("Created AO voltage channel for: " + chanList).c_str(), true);
 
-   nierr = DAQmxCfgSampClkTiming(aoTask_, niTriggerPort_.c_str(),
+   nierr = DAQmxCfgSampClkTiming(aoTask_, NULL,
       sampleRateHz_, DAQmx_Val_Rising,
       DAQmx_Val_ContSamps, samplesPerChan);
    if (nierr != 0)
@@ -749,7 +749,7 @@ int NIDAQHub::StartAOSequencingTask()
       LogMessage(GetNIDetailedErrorForMostRecentCall().c_str());
       goto error;
    }
-   LogMessage("Configured sample clock timing to use " + niTriggerPort_, true);
+   LogMessage("Configured sample clock timing to use internal clock", true);
 
    samples.reset(new float64[samplesPerChan * numChans]);
    GetLCMSequence(samples.get(), aoChannelSequences_);
