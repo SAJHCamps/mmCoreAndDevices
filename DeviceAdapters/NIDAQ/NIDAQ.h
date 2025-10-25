@@ -61,7 +61,10 @@ extern const int ERR_VOLTAGE_RANGE_EXCEEDS_DEVICE_LIMITS;
 extern const int ERR_UNKNOWN_PINS_PER_PORT;
 extern const int ERR_UNEXPECTED_AMOUNT_OF_MEASUREMENTS;
 extern const int ERR_FAILED_TO_OPEN_TRACE;
+<<<<<<< HEAD
 extern const int ERR_SEQUENCE_INVALID_NUMBER;
+=======
+>>>>>>> 8b3aab636023be766bccdb8808e4c85e8c58d2e0
 extern const int ERR_SAMPLING_RATE_TOO_LOW;
 extern const int ERR_FAILED_TO_WRITE_ALL_SAMPLES;
 
